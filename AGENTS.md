@@ -32,3 +32,7 @@ gets its own schema, so tests can't see each other's data.
   travels.
 - Keep `/healthz`, `/readyz` and `/metrics` working.
 - Every behaviour change comes with a test.
+
+## Architecture knowledge
+
+See [the architecture knowledge index](docs/knowledge/index.md).
