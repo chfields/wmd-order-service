@@ -130,6 +130,8 @@ def create_app(
             "totalCents": order.totalCents,
         }
         if order.giftMessage is not None:
+            # Forward-compatible: notification-service currently ignores giftMessage; it will be
+            # visible once that service accepts and shows it in a separate change.
             payload["giftMessage"] = order.giftMessage
         try:
             response = notification_client.post(
