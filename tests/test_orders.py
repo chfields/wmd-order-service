@@ -17,6 +17,7 @@ def test_places_an_order_and_confirms_it_once_the_customer_is_notified(
     order = response.json()
     assert order["status"] == "confirmed"
     assert order["totalCents"] == 2 * 899 + 649
+    assert order["giftMessage"] is None
     assert [line["productId"] for line in order["lines"]] == ["sku-bagels", "sku-coffee"]
 
     assert json.loads(catalog.calls[0].content)["orderRef"] == order["id"]
@@ -33,6 +34,36 @@ def test_forwards_the_correlation_id_to_both_services(client, catalog, notificat
     client.post("/v1/orders", json=CART, headers={"x-correlation-id": "journey-42"})
     assert catalog.calls[0].headers["x-correlation-id"] == "journey-42"
     assert notifications.calls[0].headers["x-correlation-id"] == "journey-42"
+
+
+def test_stores_and_returns_a_gift_message(client, notifications):
+    order = client.post("/v1/orders", json={**CART, "giftMessage": "  Happy birthday!  "}).json()
+    assert order["giftMessage"] == "Happy birthday!"
+    assert client.get(f"/v1/orders/{order['id']}").json()["giftMessage"] == "Happy birthday!"
+    assert (
+        client.get("/v1/orders", params={"userId": "user-1"}).json()[0]["giftMessage"]
+        == "Happy birthday!"
+    )
+    assert json.loads(notifications.calls[0].content)["giftMessage"] == "Happy birthday!"
+
+
+def test_normalizes_empty_gift_messages_and_omits_them_from_notifications(client, notifications):
+    order = client.post("/v1/orders", json={**CART, "giftMessage": " \t "}).json()
+    assert order["giftMessage"] is None
+    assert "giftMessage" not in json.loads(notifications.calls[0].content)
+
+
+def test_rejects_gift_messages_over_200_characters_before_reservation(client, catalog):
+    response = client.post("/v1/orders", json={**CART, "giftMessage": "x" * 201})
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "invalid_gift_message",
+            "message": "Gift messages can be at most 200 characters.",
+        }
+    }
+    assert catalog.calls == []
+    assert client.get("/v1/orders", params={"userId": "user-1"}).json() == []
 
 
 def test_keeps_the_order_pending_when_the_notification_fails(client, notifications):

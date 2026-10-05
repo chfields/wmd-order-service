@@ -29,6 +29,7 @@ class OrderItem(BaseModel):
 class OrderRequest(BaseModel):
     userId: str = Field(min_length=1, max_length=64)
     items: list[OrderItem] = Field(min_length=1, max_length=50)
+    giftMessage: str | None = Field(default=None, json_schema_extra={"maxLength": 200})
 
 
 class OrderLine(BaseModel):
@@ -44,6 +45,7 @@ class Order(BaseModel):
     status: Literal["pending", "confirmed"]
     totalCents: int
     lines: list[OrderLine]
+    giftMessage: str | None
     createdAt: datetime
     updatedAt: datetime
 
@@ -74,7 +76,7 @@ def create_app(
 
     def load(conn, order_id: str) -> Order | None:
         order = conn.execute(
-            "select id, user_id, status, total_cents, created_at, updated_at"
+            "select id, user_id, status, total_cents, gift_message, created_at, updated_at"
             " from orders where id = %s",
             (order_id,),
         ).fetchone()
@@ -99,6 +101,7 @@ def create_app(
                 )
                 for line in lines
             ],
+            giftMessage=order["gift_message"],
             createdAt=order["created_at"],
             updatedAt=order["updated_at"],
         )
@@ -120,15 +123,18 @@ def create_app(
         return response.json()
 
     def notify(order: Order) -> bool:
+        payload = {
+            "userId": order.userId,
+            "orderId": order.id,
+            "kind": "order_confirmed",
+            "totalCents": order.totalCents,
+        }
+        if order.giftMessage is not None:
+            payload["giftMessage"] = order.giftMessage
         try:
             response = notification_client.post(
                 "/v1/notifications",
-                json={
-                    "userId": order.userId,
-                    "orderId": order.id,
-                    "kind": "order_confirmed",
-                    "totalCents": order.totalCents,
-                },
+                json=payload,
                 headers=outbound_headers(),
             )
         except httpx.HTTPError:
@@ -144,13 +150,22 @@ def create_app(
 
     @app.post("/v1/orders", response_model=Order, status_code=201)
     def place(request: OrderRequest) -> Order:
+        gift_message = request.giftMessage.strip() if request.giftMessage is not None else None
+        if not gift_message:
+            gift_message = None
+        if gift_message is not None and len(gift_message) > 200:
+            raise ApiError(
+                422,
+                "invalid_gift_message",
+                "Gift messages can be at most 200 characters.",
+            )
         order_id = str(uuid.uuid4())
         reservation = reserve(order_id, request)
         with database.connect() as conn:
             conn.execute(
-                "insert into orders (id, user_id, status, total_cents)"
-                " values (%s, %s, 'pending', %s)",
-                (order_id, request.userId, reservation["totalCents"]),
+                "insert into orders (id, user_id, status, total_cents, gift_message)"
+                " values (%s, %s, 'pending', %s, %s)",
+                (order_id, request.userId, reservation["totalCents"], gift_message),
             )
             for line in reservation["lines"]:
                 conn.execute(
