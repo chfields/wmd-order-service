@@ -30,6 +30,17 @@ def test_places_an_order_and_confirms_it_once_the_customer_is_notified(
     assert client.get(f"/v1/orders/{order['id']}").json() == order
 
 
+def test_returns_null_gift_message_when_none_is_given(client):
+    response = client.post("/v1/orders", json=CART)
+    assert response.status_code == 201
+    order = response.json()
+    assert order["giftMessage"] is None
+
+    fetched = client.get(f"/v1/orders/{order['id']}").json()
+    assert "giftMessage" in fetched
+    assert fetched["giftMessage"] is None
+
+
 def test_forwards_the_correlation_id_to_both_services(client, catalog, notifications):
     client.post("/v1/orders", json=CART, headers={"x-correlation-id": "journey-42"})
     assert catalog.calls[0].headers["x-correlation-id"] == "journey-42"
