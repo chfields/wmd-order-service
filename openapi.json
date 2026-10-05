@@ -21,6 +21,17 @@
             "title": "Createdat",
             "type": "string"
           },
+          "giftMessage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Giftmessage"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -60,6 +71,7 @@
           "status",
           "totalCents",
           "lines",
+          "giftMessage",
           "createdAt",
           "updatedAt"
         ],
@@ -118,6 +130,18 @@
       },
       "OrderRequest": {
         "properties": {
+          "giftMessage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "maxLength": 200,
+            "title": "Giftmessage"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/OrderItem"

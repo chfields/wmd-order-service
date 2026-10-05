@@ -63,7 +63,7 @@ wardby:
   confidence: high
 ---
 
-Every error is raised as ApiError(status, code, message) and rendered as {"error": {"code", "message"}}. This service's codes (catalog_unavailable, unknown_order, plus unavailable and unknown_product passed through from catalog) are stable and must not be renamed.[^api-error][^error-handler][^reserve][^get-order][^error-tests]
+Every error is raised as ApiError(status, code, message) and rendered as {"error": {"code", "message"}}. This service's codes (catalog_unavailable, invalid_gift_message, unknown_order, plus unavailable and unknown_product passed through from catalog) are stable and must not be renamed.[^api-error][^error-handler][^reserve][^get-order][^error-tests]
 
 What to do: preserve error codes and use ApiError for API failures.
 
