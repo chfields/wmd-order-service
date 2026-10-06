@@ -12,13 +12,15 @@ from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.db import Database, database_from_env
 from app.observability import ApiError, configure_logging, install, outbound_headers
 
 SERVICE = "order-service"
 log = logging.getLogger("wmd.orders")
+DELIVERY_WINDOWS = ("morning", "afternoon", "evening")
+DEFAULT_DELIVERY_WINDOW = "morning"
 
 
 class OrderItem(BaseModel):
@@ -30,6 +32,16 @@ class OrderRequest(BaseModel):
     userId: str = Field(min_length=1, max_length=64)
     items: list[OrderItem] = Field(min_length=1, max_length=50)
     giftMessage: str | None = Field(default=None, json_schema_extra={"maxLength": 200})
+    deliveryWindow: str | None = Field(
+        default=None, json_schema_extra={"enum": list(DELIVERY_WINDOWS)}
+    )
+
+    @field_validator("deliveryWindow", mode="before")
+    @classmethod
+    def preserve_invalid_delivery_window(cls, value: object) -> object:
+        if value is None or isinstance(value, str):
+            return value
+        return "__invalid_delivery_window__"
 
 
 class OrderLine(BaseModel):
@@ -46,6 +58,7 @@ class Order(BaseModel):
     totalCents: int
     lines: list[OrderLine]
     giftMessage: str | None
+    deliveryWindow: Literal["morning", "afternoon", "evening"]
     createdAt: datetime
     updatedAt: datetime
 
@@ -76,7 +89,8 @@ def create_app(
 
     def load(conn, order_id: str) -> Order | None:
         order = conn.execute(
-            "select id, user_id, status, total_cents, gift_message, created_at, updated_at"
+            "select id, user_id, status, total_cents, gift_message, delivery_window, created_at,"
+            " updated_at"
             " from orders where id = %s",
             (order_id,),
         ).fetchone()
@@ -102,6 +116,7 @@ def create_app(
                 for line in lines
             ],
             giftMessage=order["gift_message"],
+            deliveryWindow=order["delivery_window"],
             createdAt=order["created_at"],
             updatedAt=order["updated_at"],
         )
@@ -128,6 +143,7 @@ def create_app(
             "orderId": order.id,
             "kind": "order_confirmed",
             "totalCents": order.totalCents,
+            "deliveryWindow": order.deliveryWindow,
         }
         if order.giftMessage is not None:
             # Forward-compatible: notification-service currently ignores giftMessage; it will be
@@ -152,6 +168,7 @@ def create_app(
 
     @app.post("/v1/orders", response_model=Order, status_code=201)
     def place(request: OrderRequest) -> Order:
+        delivery_window = request.deliveryWindow or DEFAULT_DELIVERY_WINDOW
         gift_message = request.giftMessage.strip() if request.giftMessage is not None else None
         if not gift_message:
             gift_message = None
@@ -161,13 +178,26 @@ def create_app(
                 "invalid_gift_message",
                 "Gift messages can be at most 200 characters.",
             )
+        if delivery_window not in DELIVERY_WINDOWS:
+            raise ApiError(
+                422,
+                "invalid_delivery_window",
+                "Delivery window must be morning, afternoon or evening.",
+            )
         order_id = str(uuid.uuid4())
         reservation = reserve(order_id, request)
         with database.connect() as conn:
             conn.execute(
-                "insert into orders (id, user_id, status, total_cents, gift_message)"
-                " values (%s, %s, 'pending', %s, %s)",
-                (order_id, request.userId, reservation["totalCents"], gift_message),
+                "insert into orders (id, user_id, status, total_cents, gift_message,"
+                " delivery_window)"
+                " values (%s, %s, 'pending', %s, %s, %s)",
+                (
+                    order_id,
+                    request.userId,
+                    reservation["totalCents"],
+                    gift_message,
+                    delivery_window,
+                ),
             )
             for line in reservation["lines"]:
                 conn.execute(
