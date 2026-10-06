@@ -21,6 +21,15 @@
             "title": "Createdat",
             "type": "string"
           },
+          "deliveryWindow": {
+            "enum": [
+              "morning",
+              "afternoon",
+              "evening"
+            ],
+            "title": "Deliverywindow",
+            "type": "string"
+          },
           "giftMessage": {
             "anyOf": [
               {
@@ -72,6 +81,7 @@
           "totalCents",
           "lines",
           "giftMessage",
+          "deliveryWindow",
           "createdAt",
           "updatedAt"
         ],
@@ -130,6 +140,23 @@
       },
       "OrderRequest": {
         "properties": {
+          "deliveryWindow": {
+            "anyOf": [
+              {
+                "enum": [
+                  "morning",
+                  "afternoon",
+                  "evening"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "morning",
+            "title": "Deliverywindow"
+          },
           "giftMessage": {
             "anyOf": [
               {
