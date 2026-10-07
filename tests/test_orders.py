@@ -18,6 +18,7 @@ def test_places_an_order_and_confirms_it_once_the_customer_is_notified(
     assert order["status"] == "confirmed"
     assert order["totalCents"] == 2 * 899 + 649
     assert order["giftMessage"] is None
+    assert order["deliveryWindow"] == "morning"
     assert [line["productId"] for line in order["lines"]] == ["sku-bagels", "sku-coffee"]
 
     assert json.loads(catalog.calls[0].content)["orderRef"] == order["id"]
@@ -26,6 +27,7 @@ def test_places_an_order_and_confirms_it_once_the_customer_is_notified(
         "orderId": order["id"],
         "kind": "order_confirmed",
         "totalCents": 2 * 899 + 649,
+        "deliveryWindow": "morning",
     }
     assert client.get(f"/v1/orders/{order['id']}").json() == order
 
@@ -39,6 +41,45 @@ def test_returns_null_gift_message_when_none_is_given(client):
     fetched = client.get(f"/v1/orders/{order['id']}").json()
     assert "giftMessage" in fetched
     assert fetched["giftMessage"] is None
+
+
+def test_stores_and_returns_each_delivery_window(client, notifications):
+    for window in ("morning", "afternoon", "evening"):
+        order = client.post("/v1/orders", json={**CART, "deliveryWindow": window}).json()
+        assert order["deliveryWindow"] == window
+        assert client.get(f"/v1/orders/{order['id']}").json()["deliveryWindow"] == window
+        assert json.loads(notifications.calls[-1].content)["deliveryWindow"] == window
+
+    listed = client.get("/v1/orders", params={"userId": "user-1"}).json()
+    assert {order["deliveryWindow"] for order in listed} == {"morning", "afternoon", "evening"}
+
+
+def test_rejects_invalid_delivery_windows_before_reservation(client, catalog):
+    response = client.post("/v1/orders", json={**CART, "deliveryWindow": "overnight"})
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "invalid_delivery_window",
+            "message": "Delivery window must be morning, afternoon or evening.",
+        }
+    }
+    assert catalog.calls == []
+
+    response = client.post("/v1/orders", json={**CART, "deliveryWindow": 1})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_delivery_window"
+    assert catalog.calls == []
+
+
+def test_existing_orders_get_the_default_delivery_window(client, database):
+    with database.connect() as conn:
+        conn.execute(
+            "insert into orders (id, user_id, status, total_cents)"
+            " values ('00000000-0000-0000-0000-000000000001', 'user-1', 'pending', 0)"
+        )
+
+    order = client.get("/v1/orders/00000000-0000-0000-0000-000000000001").json()
+    assert order["deliveryWindow"] == "morning"
 
 
 def test_forwards_the_correlation_id_to_both_services(client, catalog, notifications):

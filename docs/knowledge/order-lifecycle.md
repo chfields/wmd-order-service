@@ -63,7 +63,7 @@ wardby:
   confidence: high
 ---
 
-`place` calls catalog's POST /v1/reservations before it writes any row, so a refused reservation creates no order. The order is inserted as pending and becomes confirmed only if notification-service answers 200/201 to {orderId, kind: "order_confirmed"}; an optional gift message is included with that confirmation. A failed notification leaves the order pending, and the call still returns 201.[^place][^reserve][^notify][^init-migration][^lifecycle-tests]
+`place` calls catalog's POST /v1/reservations before it writes any row, so a refused reservation creates no order. The order is inserted as pending and becomes confirmed only if notification-service answers 200/201 to {orderId, kind: "order_confirmed", deliveryWindow}; an optional gift message is included with that confirmation. A failed notification leaves the order pending, and the call still returns 201.[^place][^reserve][^notify][^init-migration][^lifecycle-tests]
 
 Why: stock reservation precedes persistence, while notification acceptance controls confirmation.
 
