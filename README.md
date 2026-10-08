@@ -12,4 +12,7 @@ Turns carts into orders: reserves stock with catalog-service, records the order,
 The full contract is [`openapi.json`](openapi.json). See [`AGENTS.md`](AGENTS.md)
 for how to run and change it.
 
+Orders may specify a `deliveryWindow` of `morning`, `afternoon`, or `evening`; it defaults to
+`morning`.
+
 Configuration: `DATABASE_URL` (required), `DB_SCHEMA` (default `orders`), `CATALOG_URL`, `NOTIFICATION_URL`.
