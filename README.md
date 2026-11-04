@@ -16,3 +16,4 @@ Orders may specify a `deliveryWindow` of `morning`, `afternoon`, or `evening`; i
 `morning`.
 
 Configuration: `DATABASE_URL` (required), `DB_SCHEMA` (default `orders`), `CATALOG_URL`, `NOTIFICATION_URL`.
+Test only: this line checks one coding agent working across repositories. Do not merge.
